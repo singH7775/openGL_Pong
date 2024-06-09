@@ -1,12 +1,14 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <math.h>
+#include <time.h>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
-#define SPEED 0.0005
+#define SPEED 0.0004555
 #define M_PI 3.14159265358979323846
 
-float windowWidth, windowHeight;
 
+float windowWidth, windowHeight;
 void framebuffer_resize_callback(GLFWwindow* window, int fbW, int fbH)
 {
     glViewport(0, 0, fbW, fbH);
@@ -25,7 +27,8 @@ int main()
     glfwWindowHint(GLFW_RESIZABLE, GL_TRUE);
 
     // Create Window
-    GLFWwindow* window = glfwCreateWindow(1200, 800, "Pong", NULL, NULL); 
+    windowWidth = 1200, windowHeight = 800;
+    GLFWwindow* window = glfwCreateWindow(windowWidth, windowHeight, "Pong", NULL, NULL); 
     if (!window) {
         printf("Failed to create window");
         glfwTerminate();
@@ -41,12 +44,13 @@ int main()
         "#version 330 core\n"
         "layout (location = 0) in vec3 aPos;\n"
         "uniform float player_y_dir;\n"
+        "uniform vec2 ballPos;\n"
         "void main() {\n"
         "   if (aPos.x < -0.8) {\n"
         "       gl_Position = vec4(aPos.x, aPos.y + player_y_dir, aPos.z, 1.0f);\n"
-        "      } else {\n"
-        "           gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0f);\n"
-        "      }\n"
+        "   } else {\n"
+        "       gl_Position = vec4(aPos.x + ballPos.x, aPos.y + ballPos.y, aPos.z, 1.0f);\n"
+        "   }\n"
         "}\0";
 
     const char* fragmentShaderSrc = 
@@ -56,16 +60,16 @@ int main()
         "   fragColor = vec4(1.0f, 1.0f, 1.0f, 1.0f); \n"
         "}\0";
 
-        unsigned int vertexShader = glCreateShader(GL_VERTEX_SHADER);
-        glShaderSource(vertexShader, 1, &vertexShaderSrc, 0);
-        glCompileShader(vertexShader);
-        int success;
-        char infoLog[512];
-        glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
-        if (!success) {
-            glGetShaderInfoLog(vertexShader, 512, 0, infoLog);
-            printf("Failure in compiling vertex shader : %s\n", infoLog);
-        }
+    unsigned int vertexShader = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vertexShader, 1, &vertexShaderSrc, 0);
+    glCompileShader(vertexShader);
+    int success;
+    char infoLog[512];
+    glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
+    if (!success) {
+        glGetShaderInfoLog(vertexShader, 512, 0, infoLog);
+        printf("Failure in compiling vertex shader : %s\n", infoLog);
+    }
 
     unsigned int fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
     glShaderSource(fragmentShader, 1, &fragmentShaderSrc, 0);
@@ -125,20 +129,39 @@ int main()
     glBindVertexArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-    // Vertices for the ball
+    // Creating game ball
     const int numSegments = 200;
     float circleVertices[numSegments * 3];
     float radius = 0.04f;
     float ballPOSx = 0;
     float ballPOSy = 0;
-    float xSpeed = 0.0002f;
-    float ySpeed = 0.0002f;
+    float xSpeed = 0;
+    float ySpeed = 0;
     int refreshMillis = 30;
 
+    // To create random direction for ball in start
+    srand(time(NULL));
+    float angle = (float)rand() / RAND_MAX * (2 * M_PI);
+    float randomDirection = (float)rand() / RAND_MAX;
+    if (randomDirection < 0.25f) {
+        xSpeed = SPEED * cos(angle);
+        ySpeed = SPEED * sin(angle);
+    } else if (randomDirection < 0.5f) {
+        xSpeed = -SPEED * cos(angle);
+        ySpeed = SPEED * sin(angle);
+    } else if (randomDirection < 0.75f) {
+        xSpeed = SPEED * cos(angle);
+        ySpeed = -SPEED * sin(angle);
+    } else {
+        xSpeed = -SPEED * cos(angle);
+        ySpeed = -SPEED * sin(angle);
+    }
+
+    // Vertices for the ball
     for (int i = 0; i < numSegments; i++) {
         float angle = i * (2.0f * M_PI / numSegments);
-        circleVertices[i * 3] = ballPOSx + radius * cos(angle);
-        circleVertices[i * 3 + 1] = ballPOSy + radius * sin(angle);
+        circleVertices[i * 3] = radius * cos(angle);
+        circleVertices[i * 3 + 1] = radius * sin(angle);
         circleVertices[i * 3 + 2] = 0.0f;
     }
 
@@ -169,7 +192,7 @@ int main()
         // read keyboard input
         readKeyboard(window, &y_dir);
 
-
+        // Loading shader program
         glUseProgram(shaderProgram);
 
         // Draw player
@@ -178,23 +201,26 @@ int main()
         glBindVertexArray(VAO);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
+        // Update ball uniform position
+        int ballPosLocation = glGetUniformLocation(shaderProgram, "ballPos");
+        glUniform2f(ballPosLocation, ballPOSx, ballPOSy);
+
         // Draw circle
         glBindVertexArray(circleVAO);
         glDrawArrays(GL_TRIANGLE_FAN, 0, numSegments);
 
         glfwSwapBuffers(window);
 
+        
+        // Making sure ball stays within the game
         ballPOSx += xSpeed;
         ballPOSy += ySpeed;
-
-        float aspectRatio = windowWidth / windowHeight;
-
-        if (ballPOSx > (aspectRatio - radius)) {
-            ballPOSx = aspectRatio - radius;
+        if (ballPOSx > (1.0f - radius)) {
+            ballPOSx = 1.0f - radius;
             xSpeed = -xSpeed;
         }
-        else if (ballPOSx < -(aspectRatio - radius)) {
-            ballPOSx = -(aspectRatio - radius);
+        else if (ballPOSx < -(1.0f - radius)) {
+            ballPOSx = -(1.0f - radius);
             xSpeed = -xSpeed;
         }
         if (ballPOSy > (1.0f - radius)) {
@@ -206,27 +232,19 @@ int main()
             ySpeed = -ySpeed;
         }
 
-        for (int i = 0; i < numSegments; i++) {
-        float angle = i * (2.0f * M_PI / numSegments);
-        circleVertices[i * 3] = ballPOSx + radius * cos(angle);
-        circleVertices[i * 3 + 1] = ballPOSy + radius * sin(angle);
-        circleVertices[i * 3 + 2] = 0.0f;
-        }
-
-        glBindBuffer(GL_ARRAY_BUFFER, circleVBO);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(circleVertices), circleVertices, GL_STATIC_DRAW);
-
         glfwPollEvents();
 
     }
-    glDeleteProgram(shaderProgram);
+
     glDeleteBuffers(1, &VBO);
     glDeleteVertexArrays(1, &VAO);
     glDeleteVertexArrays(1, &circleVAO);
     glDeleteBuffers(1, &circleVBO);
+    glDeleteProgram(shaderProgram);
 
     glfwDestroyWindow(window);
     glfwTerminate();
+
     return 0;
 }
 
