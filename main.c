@@ -2,13 +2,16 @@
 #include <math.h>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
-
 #define SPEED 0.0005
 #define M_PI 3.14159265358979323846
+
+float windowWidth, windowHeight;
 
 void framebuffer_resize_callback(GLFWwindow* window, int fbW, int fbH)
 {
     glViewport(0, 0, fbW, fbH);
+    windowWidth = fbW;
+    windowHeight = fbH;
 }
 
 void readKeyboard(GLFWwindow *window, float *y_direction);
@@ -126,11 +129,16 @@ int main()
     const int numSegments = 200;
     float circleVertices[numSegments * 3];
     float radius = 0.04f;
+    float ballPOSx = 0;
+    float ballPOSy = 0;
+    float xSpeed = 0.0002f;
+    float ySpeed = 0.0002f;
+    int refreshMillis = 30;
 
     for (int i = 0; i < numSegments; i++) {
         float angle = i * (2.0f * M_PI / numSegments);
-        circleVertices[i * 3] = radius * cos(angle);
-        circleVertices[i * 3 + 1] = radius * sin(angle);
+        circleVertices[i * 3] = ballPOSx + radius * cos(angle);
+        circleVertices[i * 3 + 1] = ballPOSy + radius * sin(angle);
         circleVertices[i * 3 + 2] = 0.0f;
     }
 
@@ -175,6 +183,39 @@ int main()
         glDrawArrays(GL_TRIANGLE_FAN, 0, numSegments);
 
         glfwSwapBuffers(window);
+
+        ballPOSx += xSpeed;
+        ballPOSy += ySpeed;
+
+        float aspectRatio = windowWidth / windowHeight;
+
+        if (ballPOSx > (aspectRatio - radius)) {
+            ballPOSx = aspectRatio - radius;
+            xSpeed = -xSpeed;
+        }
+        else if (ballPOSx < -(aspectRatio - radius)) {
+            ballPOSx = -(aspectRatio - radius);
+            xSpeed = -xSpeed;
+        }
+        if (ballPOSy > (1.0f - radius)) {
+            ballPOSy = 1.0f - radius;
+            ySpeed = -ySpeed;
+        }
+        else if (ballPOSy < -(1.0f - radius)) {
+            ballPOSy = -(1.0f - radius);
+            ySpeed = -ySpeed;
+        }
+
+        for (int i = 0; i < numSegments; i++) {
+        float angle = i * (2.0f * M_PI / numSegments);
+        circleVertices[i * 3] = ballPOSx + radius * cos(angle);
+        circleVertices[i * 3 + 1] = ballPOSy + radius * sin(angle);
+        circleVertices[i * 3 + 2] = 0.0f;
+        }
+
+        glBindBuffer(GL_ARRAY_BUFFER, circleVBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(circleVertices), circleVertices, GL_STATIC_DRAW);
+
         glfwPollEvents();
 
     }
