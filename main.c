@@ -1,8 +1,10 @@
 #include <stdio.h>
+#include <math.h>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
 #define SPEED 0.0005
+#define M_PI 3.14159265358979323846
 
 void framebuffer_resize_callback(GLFWwindow* window, int fbW, int fbH)
 {
@@ -20,7 +22,7 @@ int main()
     glfwWindowHint(GLFW_RESIZABLE, GL_TRUE);
 
     // Create Window
-    GLFWwindow* window = glfwCreateWindow(800, 600, "Pong", NULL, NULL); 
+    GLFWwindow* window = glfwCreateWindow(1200, 800, "Pong", NULL, NULL); 
     if (!window) {
         printf("Failed to create window");
         glfwTerminate();
@@ -31,14 +33,17 @@ int main()
 
     // Loading GLAD
     gladLoadGL();
-    //glViewport(0, 0, 800, 600);
 
     const char* vertexShaderSrc = 
         "#version 330 core\n"
         "layout (location = 0) in vec3 aPos;\n"
-        "uniform float y_dir;\n"
+        "uniform float player_y_dir;\n"
         "void main() {\n"
-        "   gl_Position = vec4(aPos.x, aPos.y + y_dir, aPos.z, 1.0f);\n"
+        "   if (aPos.x < -0.8) {\n"
+        "       gl_Position = vec4(aPos.x, aPos.y + player_y_dir, aPos.z, 1.0f);\n"
+        "      } else {\n"
+        "           gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0f);\n"
+        "      }\n"
         "}\0";
 
     const char* fragmentShaderSrc = 
@@ -81,6 +86,7 @@ int main()
     glDeleteShader(vertexShader);
     glDeleteShader(fragmentShader);
 
+    // Vertices for player 1
     float vertices[] = {
     -0.95f, -0.1f, 0.0f, // bottom left
     -0.95f,  0.1f, 0.0f, // top left
@@ -116,6 +122,33 @@ int main()
     glBindVertexArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
+    // Vertices for the ball
+    const int numSegments = 200;
+    float circleVertices[numSegments * 3];
+    float radius = 0.04f;
+
+    for (int i = 0; i < numSegments; i++) {
+        float angle = i * (2.0f * M_PI / numSegments);
+        circleVertices[i * 3] = radius * cos(angle);
+        circleVertices[i * 3 + 1] = radius * sin(angle);
+        circleVertices[i * 3 + 2] = 0.0f;
+    }
+
+    // VA and BO for ball
+    unsigned int circleVAO, circleVBO;
+    glGenVertexArrays(1, &circleVAO);
+    glGenBuffers(1, &circleVBO);
+
+    glBindVertexArray(circleVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, circleVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(circleVertices), circleVertices, GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
+    glBindVertexArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
     float y_dir = 0.0f;
 
     // keep window open unless signaled otherwise
@@ -128,11 +161,18 @@ int main()
         // read keyboard input
         readKeyboard(window, &y_dir);
 
+
         glUseProgram(shaderProgram);
-        int y_dirLocation = glGetUniformLocation(shaderProgram, "y_dir");
-        glUniform1f(glGetUniformLocation(shaderProgram, "y_dir"), y_dir);
+
+        // Draw player
+        int player_y_dirLocation = glGetUniformLocation(shaderProgram, "player_y_dir");
+        glUniform1f(player_y_dirLocation, y_dir);
         glBindVertexArray(VAO);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+
+        // Draw circle
+        glBindVertexArray(circleVAO);
+        glDrawArrays(GL_TRIANGLE_FAN, 0, numSegments);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
@@ -141,6 +181,8 @@ int main()
     glDeleteProgram(shaderProgram);
     glDeleteBuffers(1, &VBO);
     glDeleteVertexArrays(1, &VAO);
+    glDeleteVertexArrays(1, &circleVAO);
+    glDeleteBuffers(1, &circleVBO);
 
     glfwDestroyWindow(window);
     glfwTerminate();
@@ -149,10 +191,10 @@ int main()
 
 void readKeyboard(GLFWwindow *window, float *y_direction)
 {
-    if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS && *y_direction < 0.88f) {
+    if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS && *y_direction < 0.9f) {
         *y_direction += SPEED;
     }
-    if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS && *y_direction > -0.88f) {
+    if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS && *y_direction > -0.9f) {
         *y_direction -= SPEED;
     }
 }
