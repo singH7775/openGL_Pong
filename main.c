@@ -1,5 +1,4 @@
 #include <stdio.h>
-#define _USE_MATH_DEFINES
 #include <math.h>
 #include <time.h>
 
@@ -8,7 +7,8 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
-#define SPEED 0.0004555
+#define M_PI 3.14159265358979323846
+#define SPEED 0.0004
 float y_dir = 0.0f;
 
 void framebuffer_resize_callback(GLFWwindow* window, int fbW, int fbH)
@@ -142,20 +142,18 @@ int main()
 
     // To create random direction for ball in start
     srand(time(NULL));
-    float angle = (float)rand() / RAND_MAX * (2 * M_PI);
+    float angle;
     float randomDirection = (float)rand() / RAND_MAX;
-    if (randomDirection < 0.25f) {
-        xSpeed = SPEED * cos(angle);
-        ySpeed = SPEED * sin(angle);
-    } else if (randomDirection < 0.5f) {
-        xSpeed = -SPEED * cos(angle);
-        ySpeed = SPEED * sin(angle);
-    } else if (randomDirection < 0.75f) {
-        xSpeed = SPEED * cos(angle);
-        ySpeed = -SPEED * sin(angle);
+    if (randomDirection < 0.5f) {
+    // Allow the ball to shoot at angles of 240 to 120 (left)
+    angle = ((float)rand() / RAND_MAX) * (M_PI * 4 / 3) + (M_PI * 2 / 3);
+    xSpeed = -SPEED * cos(angle);
+    ySpeed = -SPEED * sin(angle);
     } else {
-        xSpeed = -SPEED * cos(angle);
-        ySpeed = -SPEED * sin(angle);
+    // Allow the ball to shoot at angles of 300 to 60 (right)
+    angle = ((float)rand() / RAND_MAX) * (M_PI * 2 / 3) - (M_PI * 5 / 3);
+    xSpeed = SPEED * cos(angle);
+    ySpeed = SPEED * sin(angle);
     }
 
     // Vertices for the ball
@@ -183,9 +181,9 @@ int main()
 
     // Load score
     int width, height, nrChannels;
-    unsigned char *data = stbi_load("Number0.png", &width, &height, &nrChannels, 0);
+    unsigned char *data = stbi_load("Number1.png", &width, &height, &nrChannels, 0);
     if (data == NULL) {
-        printf("Failed to load texture image: Number0.png\n");
+        printf("Failed to load texture image: Number1.png\n");
     }
 
     // Determine the correct format based on the number of channels
@@ -210,10 +208,10 @@ int main()
 
     float ScoreVertices[] = {
     // positions        // colors           // texture coords
-    0.1f, 0.9f, 0.0f,   1.0f, 0.0f, 0.0f,   1.0f, 1.0f, // top right
-    0.1f, 0.7f, 0.0f,   0.0f, 1.0f, 0.0f,   1.0f, 0.0f, // bottom right
-    -0.1f, 0.7f, 0.0f,  0.0f, 0.0f, 1.0f,   0.0f, 0.0f, // bottom left
-    -0.1f, 0.9f, 0.0f,  1.0f, 1.0f, 0.0f,   0.0f, 1.0f  // top left
+    0.1f, 0.9f, 0.0f,   1.0f, 0.0f, 0.0f,   0.8f, 0.2f, // top right
+    0.1f, 0.7f, 0.0f,   0.0f, 1.0f, 0.0f,   0.8f, 0.8f, // bottom right
+    -0.1f, 0.7f, 0.0f,  0.0f, 0.0f, 1.0f,   0.2f, 0.8f, // bottom left
+    -0.1f, 0.9f, 0.0f,  1.0f, 1.0f, 0.0f,   0.2f, 0.2f  // top left
     };
 
     unsigned int ScoreIndices[] = {
@@ -321,6 +319,14 @@ int main()
         // read keyboard input
         readKeyboard(window, &y_dir);
 
+        // Displaying the score
+        glUseProgram(SCOREshaderProgram);
+        glUniform1i(glGetUniformLocation(SCOREshaderProgram, "ourTexture"), 0);
+        glBindVertexArray(ScoreVAO);
+        glBindTexture(GL_TEXTURE_2D, texture);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ScoreEBO);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+
         // Loading shader program
         glUseProgram(shaderProgram);
 
@@ -338,26 +344,36 @@ int main()
         glBindVertexArray(circleVAO);
         glDrawArrays(GL_TRIANGLE_FAN, 0, numSegments);
 
-        // Displaying the score
-        glUseProgram(SCOREshaderProgram);
-        glUniform1i(glGetUniformLocation(SCOREshaderProgram, "ourTexture"), 0);
-        glBindVertexArray(ScoreVAO);
-        glBindTexture(GL_TEXTURE_2D, texture);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ScoreEBO);
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-
         glfwSwapBuffers(window);
 
-        // Making sure ball stays within the game
-        ballPOSx += xSpeed;
-        ballPOSy += ySpeed;
-        if (ballPOSx > (1.0f - radius)) {
-            ballPOSx = 1.0f - radius;
+        // Check for collisions with the player's paddle
+        if (ballPOSx < -0.93f && ballPOSx > -0.95f && ballPOSy < (y_dir + 0.1f) && ballPOSy > (y_dir - 0.1f))
+        {
             xSpeed = -xSpeed;
         }
-        else if (ballPOSx < -(1.0f - radius)) {
-            ballPOSx = -(1.0f - radius);
-            xSpeed = -xSpeed;
+
+        // Update ball pos
+        ballPOSx += xSpeed;
+        ballPOSy += ySpeed;
+
+        // Making sure ball stays within the game
+        if (ballPOSx > (1.0f - radius) || ballPOSx < -(1.0f - radius)) {
+            ballPOSx = 0.0f;
+            ballPOSy = 0.0f;
+
+            float angle;
+            float randomDirection = (float)rand() / RAND_MAX;
+            if (randomDirection < 0.5f) {
+                // Allow the ball to shoot at angles of 240 to 120 (left)
+                angle = ((float)rand() / RAND_MAX) * (M_PI * 4 / 3) + (M_PI * 2 / 3);
+                xSpeed = -SPEED * cos(angle);
+                ySpeed = -SPEED * sin(angle);
+            } else {
+                // Allow the ball to shoot at angles of 300 to 60 (right)
+                angle = ((float)rand() / RAND_MAX) * (M_PI * 2 / 3) + (M_PI * 5 / 3);
+                xSpeed = SPEED * cos(angle);
+                ySpeed = SPEED * sin(angle);
+            }
         }
         if (ballPOSy > (1.0f - radius)) {
             ballPOSy = 1.0f - radius;
