@@ -1,19 +1,19 @@
 #include <stdio.h>
-#include <stdlib.h>
+#define _USE_MATH_DEFINES
 #include <math.h>
 #include <time.h>
+
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
+
 #define SPEED 0.0004555
-#define M_PI 3.14159265358979323846
+float y_dir = 0.0f;
 
-
-float windowWidth, windowHeight;
 void framebuffer_resize_callback(GLFWwindow* window, int fbW, int fbH)
 {
     glViewport(0, 0, fbW, fbH);
-    windowWidth = fbW;
-    windowHeight = fbH;
 }
 
 void readKeyboard(GLFWwindow *window, float *y_direction);
@@ -27,7 +27,7 @@ int main()
     glfwWindowHint(GLFW_RESIZABLE, GL_TRUE);
 
     // Create Window
-    windowWidth = 1200, windowHeight = 800;
+    float windowWidth = 1400, windowHeight = 800;
     GLFWwindow* window = glfwCreateWindow(windowWidth, windowHeight, "Pong", NULL, NULL); 
     if (!window) {
         printf("Failed to create window");
@@ -40,6 +40,7 @@ int main()
     // Loading GLAD
     gladLoadGL();
 
+    // Shaders code
     const char* vertexShaderSrc = 
         "#version 330 core\n"
         "layout (location = 0) in vec3 aPos;\n"
@@ -60,6 +61,7 @@ int main()
         "   fragColor = vec4(1.0f, 1.0f, 1.0f, 1.0f); \n"
         "}\0";
 
+    // Creating shaders and linking to one program
     unsigned int vertexShader = glCreateShader(GL_VERTEX_SHADER);
     glShaderSource(vertexShader, 1, &vertexShaderSrc, 0);
     glCompileShader(vertexShader);
@@ -94,11 +96,11 @@ int main()
     glDeleteShader(fragmentShader);
 
     // Vertices for player 1
-    float vertices[] = {
+    float P1vertices[] = {
     -0.95f, -0.1f, 0.0f, // bottom left
     -0.95f,  0.1f, 0.0f, // top left
-    -0.90f, -0.1f, 0.0f, // bottom right
-    -0.90f,  0.1f, 0.0f  // top right
+    -0.93f, -0.1f, 0.0f, // bottom right
+    -0.93f,  0.1f, 0.0f  // top right
     };
 
     unsigned int indices[] = {
@@ -106,7 +108,7 @@ int main()
         1, 2, 3
     };
 
-    // created vertex array and buffer object
+    // created vertex array / buffer object / element buffer object
     unsigned int VAO, VBO, EBO;
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
@@ -119,7 +121,7 @@ int main()
 
 
     // Fill the data and enable
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(P1vertices), P1vertices, GL_STATIC_DRAW);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
 
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
@@ -130,14 +132,13 @@ int main()
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
     // Creating game ball
-    const int numSegments = 200;
+    const int numSegments = 300;
     float circleVertices[numSegments * 3];
-    float radius = 0.04f;
+    float radius = 0.03f;
     float ballPOSx = 0;
     float ballPOSy = 0;
     float xSpeed = 0;
     float ySpeed = 0;
-    int refreshMillis = 30;
 
     // To create random direction for ball in start
     srand(time(NULL));
@@ -180,7 +181,135 @@ int main()
     glBindVertexArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-    float y_dir = 0.0f;
+    // Load score
+    int width, height, nrChannels;
+    unsigned char *data = stbi_load("Number0.png", &width, &height, &nrChannels, 0);
+    if (data == NULL) {
+        printf("Failed to load texture image: Number0.png\n");
+    }
+
+    // Determine the correct format based on the number of channels
+    GLenum format;
+    if (nrChannels == 1)
+        format = GL_RED;
+    else if (nrChannels == 3)
+        format = GL_RGB;
+    else if (nrChannels == 4)
+        format = GL_RGBA;
+    
+    unsigned int texture;
+    glGenTextures(1, &texture);
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);    
+    glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+    glGenerateMipmap(GL_TEXTURE_2D);
+    stbi_image_free(data);
+
+    float ScoreVertices[] = {
+    // positions        // colors           // texture coords
+    0.1f, 0.9f, 0.0f,   1.0f, 0.0f, 0.0f,   1.0f, 1.0f, // top right
+    0.1f, 0.7f, 0.0f,   0.0f, 1.0f, 0.0f,   1.0f, 0.0f, // bottom right
+    -0.1f, 0.7f, 0.0f,  0.0f, 0.0f, 1.0f,   0.0f, 0.0f, // bottom left
+    -0.1f, 0.9f, 0.0f,  1.0f, 1.0f, 0.0f,   0.0f, 1.0f  // top left
+    };
+
+    unsigned int ScoreIndices[] = {
+    0, 1, 3,   // First triangle
+    1, 2, 3    // Second triangle
+    };
+
+    // Shaders code for SCORE
+    const char* SCOREvertexShaderSrc = 
+        "#version 330 core\n"
+        "layout (location = 0) in vec3 aPos;\n"
+        "layout (location = 1) in vec3 aColor;\n"
+        "layout (location = 2) in vec2 aTexCoord;\n"
+        "out vec3 ourColor;\n"
+        "out vec2 TexCoord;\n"
+        "void main() {\n"
+        "       gl_Position = vec4(aPos, 1.0);\n"
+        "       ourColor = aColor;\n"
+        "       TexCoord = aTexCoord;\n"
+        "}\0";
+
+    const char* SCOREfragmentShaderSrc = 
+        "#version 330 core\n"
+        "out vec4 fragColor;\n"
+        "in vec3 ourColor;\n"
+        "in vec2 TexCoord;\n"
+        "uniform sampler2D ourTexture;\n"
+        "void main() {\n"
+        "   fragColor = texture(ourTexture, TexCoord);\n"
+        "}\0";
+
+    // Creating shaders and linking to a seperate program
+    unsigned int SCOREvertexShader = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(SCOREvertexShader, 1, &SCOREvertexShaderSrc, NULL);
+    glCompileShader(SCOREvertexShader);
+
+    glGetShaderiv(SCOREvertexShader, GL_COMPILE_STATUS, &success);
+    if (!success) {
+        glGetShaderInfoLog(SCOREvertexShader, 512, NULL, infoLog);
+        printf("Failure in compiling score vertex shader: %s\n", infoLog);
+    }
+
+    unsigned int SCOREfragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(SCOREfragmentShader, 1, &SCOREfragmentShaderSrc, NULL);
+    glCompileShader(SCOREfragmentShader);
+
+    glGetShaderiv(SCOREfragmentShader, GL_COMPILE_STATUS, &success);
+    if (!success) {
+        glGetShaderInfoLog(SCOREfragmentShader, 512, NULL, infoLog);
+        printf("Failure in compiling score fragment shader: %s\n", infoLog);
+    }
+
+    unsigned int SCOREshaderProgram = glCreateProgram();
+    glAttachShader(SCOREshaderProgram, SCOREvertexShader);
+    glAttachShader(SCOREshaderProgram, SCOREfragmentShader);
+    glLinkProgram(SCOREshaderProgram);
+
+    glGetProgramiv(SCOREshaderProgram, GL_LINK_STATUS, &success);
+    if (!success) {
+        glGetProgramInfoLog(SCOREshaderProgram, 512, NULL, infoLog);
+        printf("Failed to link the score shader program: %s\n", infoLog);
+    }
+    
+    // Deleting shaders after linking with new program
+    glDeleteShader(SCOREvertexShader);
+    glDeleteShader(SCOREfragmentShader);
+
+    // Creating vertex array object
+    unsigned int ScoreVAO;
+    glGenVertexArrays(1, &ScoreVAO);
+    glBindVertexArray(ScoreVAO);
+
+    // Buffer object
+    unsigned int ScoreVBO;
+    glGenBuffers(1, &ScoreVBO);
+    glBindBuffer(GL_ARRAY_BUFFER, ScoreVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(ScoreVertices), ScoreVertices, GL_STATIC_DRAW);
+
+    // Specifying layout and format of the object
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+    glEnableVertexAttribArray(2);
+
+    // Element buffer object
+    unsigned int ScoreEBO;
+    glGenBuffers(1, &ScoreEBO);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ScoreEBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(ScoreIndices), ScoreIndices, GL_STATIC_DRAW);
+
+
+    glBindVertexArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
     // keep window open unless signaled otherwise
     while (!glfwWindowShouldClose(window)) {
@@ -209,9 +338,16 @@ int main()
         glBindVertexArray(circleVAO);
         glDrawArrays(GL_TRIANGLE_FAN, 0, numSegments);
 
+        // Displaying the score
+        glUseProgram(SCOREshaderProgram);
+        glUniform1i(glGetUniformLocation(SCOREshaderProgram, "ourTexture"), 0);
+        glBindVertexArray(ScoreVAO);
+        glBindTexture(GL_TEXTURE_2D, texture);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ScoreEBO);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+
         glfwSwapBuffers(window);
 
-        
         // Making sure ball stays within the game
         ballPOSx += xSpeed;
         ballPOSy += ySpeed;
@@ -236,6 +372,13 @@ int main()
 
     }
 
+    // Cleaning up the score
+    glDeleteVertexArrays(1, &ScoreVAO);
+    glDeleteBuffers(1, &ScoreVBO);
+    glDeleteTextures(1, &texture);
+    glDeleteProgram(SCOREshaderProgram);
+
+    // Cleaning up the game
     glDeleteBuffers(1, &VBO);
     glDeleteVertexArrays(1, &VAO);
     glDeleteVertexArrays(1, &circleVAO);
