@@ -1,44 +1,57 @@
 #include <stdio.h>
 #include <math.h>
 #include <time.h>
+#include <stdio.h>
+#include <string.h>
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
-#define STB_IMAGE_IMPLEMENTATION
-#include <stb_image.h>
+#include <ft2build.h>
+#include FT_FREETYPE_H
 
 #define M_PI 3.14159265358979323846
-#define SPEED 0.0004
+#define SPEED 0.0002
+
+float windowWidth = 1400, windowHeight = 800;
 float y_dir = 0.0f;
+unsigned int textShaderProgram;
+GLuint textTexture;
+FT_Library ft;
+FT_Face face;
+GLuint textVAO, textVBO;
 
-void framebuffer_resize_callback(GLFWwindow* window, int fbW, int fbH)
-{
-    glViewport(0, 0, fbW, fbH);
-}
-
+void framebuffer_resize_callback(GLFWwindow* window, int fbW, int fbH);
 void readKeyboard(GLFWwindow *window, float *y_direction);
+void renderText(const char *text, float x, float y, float scale);
 
 int main()
 {
-    glfwInit();
+    if (!glfwInit()) {
+        printf("Failed to initialize GLFW\n");
+        return -1;
+    }
+
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_RESIZABLE, GL_TRUE);
 
     // Create Window
-    float windowWidth = 1400, windowHeight = 800;
     GLFWwindow* window = glfwCreateWindow(windowWidth, windowHeight, "Pong", NULL, NULL); 
     if (!window) {
         printf("Failed to create window");
         glfwTerminate();
         return -1;
     }
+
     glfwMakeContextCurrent(window);
     glfwSetFramebufferSizeCallback(window, framebuffer_resize_callback);
 
     // Loading GLAD
-    gladLoadGL();
+    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
+        printf("Failed to initialize GLAD\n");
+        return -1;
+    }
 
     // Shaders code
     const char* vertexShaderSrc = 
@@ -88,7 +101,7 @@ int main()
     glLinkProgram(shaderProgram);
     glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
     if (!success) {
-        glGetProgramInfoLog(shaderProgram, 512, 0, infoLog);
+        glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
         printf("Failed to link to the shader : %s\n", infoLog);
     }
 
@@ -118,7 +131,6 @@ int main()
     glBindVertexArray(VAO);
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-
 
     // Fill the data and enable
     glBufferData(GL_ARRAY_BUFFER, sizeof(P1vertices), P1vertices, GL_STATIC_DRAW);
@@ -179,136 +191,95 @@ int main()
     glBindVertexArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-    // Load score
-    int width, height, nrChannels;
-    unsigned char *data = stbi_load("Number1.png", &width, &height, &nrChannels, 0);
-    if (data == NULL) {
-        printf("Failed to load texture image: Number1.png\n");
+    if (FT_Init_FreeType(&ft))
+    {
+        fprintf(stderr, "Could not init FreeType Library\n");
+        return -1;
     }
 
-    // Determine the correct format based on the number of channels
-    GLenum format;
-    if (nrChannels == 1)
-        format = GL_RED;
-    else if (nrChannels == 3)
-        format = GL_RGB;
-    else if (nrChannels == 4)
-        format = GL_RGBA;
-    
-    unsigned int texture;
-    glGenTextures(1, &texture);
-    glBindTexture(GL_TEXTURE_2D, texture);
+    if(FT_New_Face(ft, "C:/myFonts/ariali.ttf", 0, &face))
+    {
+        fprintf(stderr, "Failed to load font\n");
+        return -1;
+    }
+
+    FT_Set_Pixel_Sizes(face, 0, 36);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1); // Ensure pixel storage mode is set
+
+    glGenTextures(1, &textTexture);
+    glBindTexture(GL_TEXTURE_2D, textTexture);
+
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);    
-    glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
-    glGenerateMipmap(GL_TEXTURE_2D);
-    stbi_image_free(data);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    float ScoreVertices[] = {
-    // positions        // colors           // texture coords
-    0.1f, 0.9f, 0.0f,   1.0f, 0.0f, 0.0f,   0.8f, 0.2f, // top right
-    0.1f, 0.7f, 0.0f,   0.0f, 1.0f, 0.0f,   0.8f, 0.8f, // bottom right
-    -0.1f, 0.7f, 0.0f,  0.0f, 0.0f, 1.0f,   0.2f, 0.8f, // bottom left
-    -0.1f, 0.9f, 0.0f,  1.0f, 1.0f, 0.0f,   0.2f, 0.2f  // top left
-    };
-
-    unsigned int ScoreIndices[] = {
-    0, 1, 3,   // First triangle
-    1, 2, 3    // Second triangle
-    };
-
-    // Shaders code for SCORE
-    const char* SCOREvertexShaderSrc = 
-        "#version 330 core\n"
-        "layout (location = 0) in vec3 aPos;\n"
-        "layout (location = 1) in vec3 aColor;\n"
-        "layout (location = 2) in vec2 aTexCoord;\n"
-        "out vec3 ourColor;\n"
-        "out vec2 TexCoord;\n"
+    const char *textVertexShaderSource = "#version 330 core\n"
+        "layout (location = 0) in vec4 vertex;\n"
+        "out vec2 TexCoords;\n"
+        "uniform mat4 projection;\n"
         "void main() {\n"
-        "       gl_Position = vec4(aPos, 1.0);\n"
-        "       ourColor = aColor;\n"
-        "       TexCoord = aTexCoord;\n"
+        "       gl_Position = projection * vec4(vertex.xy, 0.0, 1.0);\n"
+        "       TexCoords = vertex.zw;\n"
         "}\0";
 
-    const char* SCOREfragmentShaderSrc = 
-        "#version 330 core\n"
-        "out vec4 fragColor;\n"
-        "in vec3 ourColor;\n"
-        "in vec2 TexCoord;\n"
-        "uniform sampler2D ourTexture;\n"
+    const char *textFragmentShaderSource = "#version 330 core\n"
+        "in vec2 TexCoords;\n"
+        "out vec4 color;\n"
+        "uniform sampler2D text;\n"
         "void main() {\n"
-        "   fragColor = texture(ourTexture, TexCoord);\n"
+        "       vec4 sampled = vec4(1.0, 1.0, 1.0, texture(text, TexCoords).r);\n"
+        "       color = vec4(1.0, 1.0, 1.0, 1.0) * sampled;\n"
         "}\0";
-
-    // Creating shaders and linking to a seperate program
-    unsigned int SCOREvertexShader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(SCOREvertexShader, 1, &SCOREvertexShaderSrc, NULL);
-    glCompileShader(SCOREvertexShader);
-
-    glGetShaderiv(SCOREvertexShader, GL_COMPILE_STATUS, &success);
-    if (!success) {
-        glGetShaderInfoLog(SCOREvertexShader, 512, NULL, infoLog);
-        printf("Failure in compiling score vertex shader: %s\n", infoLog);
-    }
-
-    unsigned int SCOREfragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(SCOREfragmentShader, 1, &SCOREfragmentShaderSrc, NULL);
-    glCompileShader(SCOREfragmentShader);
-
-    glGetShaderiv(SCOREfragmentShader, GL_COMPILE_STATUS, &success);
-    if (!success) {
-        glGetShaderInfoLog(SCOREfragmentShader, 512, NULL, infoLog);
-        printf("Failure in compiling score fragment shader: %s\n", infoLog);
-    }
-
-    unsigned int SCOREshaderProgram = glCreateProgram();
-    glAttachShader(SCOREshaderProgram, SCOREvertexShader);
-    glAttachShader(SCOREshaderProgram, SCOREfragmentShader);
-    glLinkProgram(SCOREshaderProgram);
-
-    glGetProgramiv(SCOREshaderProgram, GL_LINK_STATUS, &success);
-    if (!success) {
-        glGetProgramInfoLog(SCOREshaderProgram, 512, NULL, infoLog);
-        printf("Failed to link the score shader program: %s\n", infoLog);
-    }
     
-    // Deleting shaders after linking with new program
-    glDeleteShader(SCOREvertexShader);
-    glDeleteShader(SCOREfragmentShader);
+    unsigned int textVertexShader = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(textVertexShader, 1, &textVertexShaderSource, NULL);
+    glCompileShader(textVertexShader);
+    glGetShaderiv(textVertexShader, GL_COMPILE_STATUS, &success);
+    if (!success) {
+        glGetShaderInfoLog(vertexShader, 512, 0, infoLog);
+        printf("Failure in compiling vertex shader : %s\n", infoLog);
+    }
 
-    // Creating vertex array object
-    unsigned int ScoreVAO;
-    glGenVertexArrays(1, &ScoreVAO);
-    glBindVertexArray(ScoreVAO);
+    unsigned int textFragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(textFragmentShader, 1, &textFragmentShaderSource, NULL);
+    glCompileShader(textFragmentShader);
+    glGetShaderiv(textFragmentShader, GL_COMPILE_STATUS, &success);
+    if (!success) {
+        glGetShaderInfoLog(vertexShader, 512, 0, infoLog);
+        printf("Failure in compiling vertex shader : %s\n", infoLog);
+    }
 
-    // Buffer object
-    unsigned int ScoreVBO;
-    glGenBuffers(1, &ScoreVBO);
-    glBindBuffer(GL_ARRAY_BUFFER, ScoreVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(ScoreVertices), ScoreVertices, GL_STATIC_DRAW);
+    textShaderProgram = glCreateProgram();
+    glAttachShader(textShaderProgram, textVertexShader);
+    glAttachShader(textShaderProgram, textFragmentShader);
+    glLinkProgram(textShaderProgram);
+    glGetProgramiv(textShaderProgram, GL_LINK_STATUS, &success);
+    if (!success) {
+    glGetProgramInfoLog(textShaderProgram, 512, NULL, infoLog);
+    printf("Failed to link text shader program: %s\n", infoLog);
+    }
 
-    // Specifying layout and format of the object
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
+    // Create VAO and VBO for rendering text
+    glGenVertexArrays(1, &textVAO);
+    glGenBuffers(1, &textVBO);
+
+    glBindVertexArray(textVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, textVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * 6 * 4, NULL, GL_DYNAMIC_DRAW);
+
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
-    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), 0);
 
-    // Element buffer object
-    unsigned int ScoreEBO;
-    glGenBuffers(1, &ScoreEBO);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ScoreEBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(ScoreIndices), ScoreIndices, GL_STATIC_DRAW);
-
-
-    glBindVertexArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
 
+    glDeleteShader(textVertexShader);
+    glDeleteShader(textFragmentShader);
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    
     // keep window open unless signaled otherwise
     while (!glfwWindowShouldClose(window)) {
 
@@ -316,16 +287,24 @@ int main()
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f); 
         glClear(GL_COLOR_BUFFER_BIT);
 
+        char score_player[20];
+        char score_player2[20];
+        static int player1_score = 0;
+        static int player2_score = 0;
+
         // read keyboard input
         readKeyboard(window, &y_dir);
+        snprintf(score_player, sizeof(score_player), "%d", player1_score);
+        snprintf(score_player2, sizeof(score_player2), "%d", player2_score);
 
-        // Displaying the score
-        glUseProgram(SCOREshaderProgram);
-        glUniform1i(glGetUniformLocation(SCOREshaderProgram, "ourTexture"), 0);
-        glBindVertexArray(ScoreVAO);
-        glBindTexture(GL_TEXTURE_2D, texture);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ScoreEBO);
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+        float score_playerX = 60.0f;
+        float score_player2X = windowWidth - 100.0f; 
+        renderText(score_player, score_playerX, windowHeight - 50.0f, 1.0f);
+        renderText(score_player2, score_player2X, windowHeight - 50.0f, 1.0f);
+
+        const char* winningScore = "Target Score: 6";
+        float winningScoreX = (windowWidth - strlen(winningScore) * 20) / 2;
+        renderText(winningScore, winningScoreX, windowHeight - 100.0f, 1.0f);
 
         // Loading shader program
         glUseProgram(shaderProgram);
@@ -358,23 +337,30 @@ int main()
 
         // Making sure ball stays within the game
         if (ballPOSx > (1.0f - radius) || ballPOSx < -(1.0f - radius)) {
-            ballPOSx = 0.0f;
-            ballPOSy = 0.0f;
-
-            float angle;
-            float randomDirection = (float)rand() / RAND_MAX;
-            if (randomDirection < 0.5f) {
-                // Allow the ball to shoot at angles of 240 to 120 (left)
-                angle = ((float)rand() / RAND_MAX) * (M_PI * 4 / 3) + (M_PI * 2 / 3);
-                xSpeed = -SPEED * cos(angle);
-                ySpeed = -SPEED * sin(angle);
-            } else {
-                // Allow the ball to shoot at angles of 300 to 60 (right)
-                angle = ((float)rand() / RAND_MAX) * (M_PI * 2 / 3) + (M_PI * 5 / 3);
-                xSpeed = SPEED * cos(angle);
-                ySpeed = SPEED * sin(angle);
+            if (ballPOSx > (1.0f - radius)) {
+                player1_score++;
             }
+            else if (ballPOSx < -(1.0f - radius)) {
+                player2_score++;
+            }
+
+        ballPOSx = 0.0f;
+        ballPOSy = 0.0f;
+
+        float angle;
+        float randomDirection = (float)rand() / RAND_MAX;
+        if (randomDirection < 0.25f) {
+            angle = randomDirection * (M_PI / 3) + (M_PI / 6);
+        } else if (randomDirection < 0.5f) {
+            angle = randomDirection * (M_PI / 3) + (2 * M_PI / 3);
+        } else if (randomDirection < 0.75f) {
+            angle = randomDirection * (M_PI / 3) + (6 * M_PI / 6);
+        } else {
+            angle = randomDirection * (M_PI / 3) + (8.5 * M_PI / 6);
         }
+        xSpeed = SPEED * cos(angle);
+        ySpeed = SPEED * sin(angle);
+    }
         if (ballPOSy > (1.0f - radius)) {
             ballPOSy = 1.0f - radius;
             ySpeed = -ySpeed;
@@ -388,18 +374,13 @@ int main()
 
     }
 
-    // Cleaning up the score
-    glDeleteVertexArrays(1, &ScoreVAO);
-    glDeleteBuffers(1, &ScoreVBO);
-    glDeleteTextures(1, &texture);
-    glDeleteProgram(SCOREshaderProgram);
-
     // Cleaning up the game
     glDeleteBuffers(1, &VBO);
     glDeleteVertexArrays(1, &VAO);
     glDeleteVertexArrays(1, &circleVAO);
     glDeleteBuffers(1, &circleVBO);
     glDeleteProgram(shaderProgram);
+    glDeleteProgram(textShaderProgram);
 
     glfwDestroyWindow(window);
     glfwTerminate();
@@ -415,4 +396,66 @@ void readKeyboard(GLFWwindow *window, float *y_direction)
     if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS && *y_direction > -0.9f) {
         *y_direction -= SPEED;
     }
+}
+
+void renderText(const char *text, float x, float y, float scale) {
+    // Activate the text shader program
+    glUseProgram(textShaderProgram);
+    glUniform1i(glGetUniformLocation(textShaderProgram, "text"), 0);
+
+    // Set the projection matrix
+    float projection[16] = {
+        2.0f / windowWidth, 0.0f, 0.0f, 0.0f,
+        0.0f, 2.0f / windowHeight, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f,
+        -1.0f, -1.0f, 0.0f, 1.0f
+    };
+    glUniformMatrix4fv(glGetUniformLocation(textShaderProgram, "projection"), 1, GL_FALSE, projection);
+
+    // Bind the VAO for rendering the text quads
+    glBindVertexArray(textVAO);
+
+    // Iterate over each character in the text string
+    for (const char *p = text; *p; p++) {
+        // Load the glyph for the character
+        if (FT_Load_Char(face, *p, FT_LOAD_RENDER))
+            continue;
+
+        // Generate a texture for the glyph bitmap
+        glBindTexture(GL_TEXTURE_2D, textTexture);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, face->glyph->bitmap.width, face->glyph->bitmap.rows, 0, GL_RED, GL_UNSIGNED_BYTE, face->glyph->bitmap.buffer);
+
+        // Calculate vertex and texture coordinates
+        GLfloat xpos = x + face->glyph->bitmap_left * scale;
+        GLfloat ypos = y - (face->glyph->bitmap.rows - face->glyph->bitmap_top) * scale;
+        GLfloat w = face->glyph->bitmap.width * scale;
+        GLfloat h = face->glyph->bitmap.rows * scale;
+
+        GLfloat vertices[6][4] = {
+            { xpos,     ypos + h, 0.0f, 0.0f },
+            { xpos,     ypos,     0.0f, 1.0f },
+            { xpos + w, ypos,     1.0f, 1.0f },
+            { xpos,     ypos + h, 0.0f, 0.0f },
+            { xpos + w, ypos,     1.0f, 1.0f },
+            { xpos + w, ypos + h, 1.0f, 0.0f }
+        };
+
+        // Render the glyph texture over the quad
+        glBindTexture(GL_TEXTURE_2D, textTexture);
+        glBindBuffer(GL_ARRAY_BUFFER, textVBO);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+
+        // Advance cursors for the next glyph
+        x += (face->glyph->advance.x >> 6) * scale;
+    }
+
+    // Unbind the VAO and shader program
+    glBindVertexArray(0);
+    glUseProgram(0);
+}
+
+void framebuffer_resize_callback(GLFWwindow* window, int fbW, int fbH)
+{
+    glViewport(0, 0, fbW, fbH);
 }
