@@ -3,6 +3,7 @@
 #include <time.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdbool.h>
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -20,9 +21,13 @@ FT_Library ft;
 FT_Face face;
 GLuint textVAO, textVBO;
 
-void framebuffer_resize_callback(GLFWwindow* window, int fbW, int fbH);
 void readKeyboard(GLFWwindow *window, float *y_direction);
+void handleGameOver(int player1_score, int player2_score, bool* gameOver);
+void displayGameOverMessage(int winningPlayer);
+void updateBallPosition(float *ballPOSx, float *ballPOSy, float *xSpeed, float *ySpeed, float radius, float y_dir);
+void handleBallWallCollision(float *ballPOSx, float *ballPOSy, float *xSpeed, float *ySpeed, int *player1_score, int *player2_score, float radius);
 void renderText(const char *text, float x, float y, float scale);
+void framebuffer_resize_callback(GLFWwindow* window, int fbW, int fbH);
 
 int main()
 {
@@ -157,13 +162,13 @@ int main()
     float angle;
     float randomDirection = (float)rand() / RAND_MAX;
     if (randomDirection < 0.5f) {
-    // Allow the ball to shoot at angles of 240 to 120 (left)
-    angle = ((float)rand() / RAND_MAX) * (M_PI * 4 / 3) + (M_PI * 2 / 3);
+    // Allow the ball to shoot at angles between 110 and 250 degrees (left)
+    angle = ((float)rand() / RAND_MAX) * (M_PI * 7 / 9) + (M_PI * 11 / 18);
     xSpeed = -SPEED * cos(angle);
     ySpeed = -SPEED * sin(angle);
     } else {
-    // Allow the ball to shoot at angles of 300 to 60 (right)
-    angle = ((float)rand() / RAND_MAX) * (M_PI * 2 / 3) - (M_PI * 5 / 3);
+    // Allow the ball to shoot at angles between 290 and 70 degrees (right)
+    angle = ((float)rand() / RAND_MAX) * (M_PI * 7 / 9) + (M_PI * 29 / 18);
     xSpeed = SPEED * cos(angle);
     ySpeed = SPEED * sin(angle);
     }
@@ -280,99 +285,63 @@ int main()
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     
+    bool gameOver = false;
+    
     // keep window open unless signaled otherwise
     while (!glfwWindowShouldClose(window)) {
+		// Setting color of window and swapping the buffers to display
+		glClearColor(0.0f, 0.0f, 0.0f, 1.0f); 
+		glClear(GL_COLOR_BUFFER_BIT);
 
-        // Setting color of window and swapping the buffers to display
-        glClearColor(0.0f, 0.0f, 0.0f, 1.0f); 
-        glClear(GL_COLOR_BUFFER_BIT);
+		char score_player[20];
+		char score_player2[20];
+		static int player1_score = 0;
+		static int player2_score = 0;
 
-        char score_player[20];
-        char score_player2[20];
-        static int player1_score = 0;
-        static int player2_score = 0;
+		handleGameOver(player1_score, player2_score, &gameOver);
 
-        // read keyboard input
-        readKeyboard(window, &y_dir);
-        snprintf(score_player, sizeof(score_player), "%d", player1_score);
-        snprintf(score_player2, sizeof(score_player2), "%d", player2_score);
+		if (!gameOver) {
+			// read keyboard input
+			readKeyboard(window, &y_dir);
 
-        float score_playerX = 60.0f;
-        float score_player2X = windowWidth - 100.0f; 
-        renderText(score_player, score_playerX, windowHeight - 50.0f, 1.0f);
-        renderText(score_player2, score_player2X, windowHeight - 50.0f, 1.0f);
+			// Display scores
+			snprintf(score_player, sizeof(score_player), "%d", player1_score);
+			snprintf(score_player2, sizeof(score_player2), "%d", player2_score);
 
-        const char* winningScore = "Target Score: 6";
-        float winningScoreX = (windowWidth - strlen(winningScore) * 20) / 2;
-        renderText(winningScore, winningScoreX, windowHeight - 100.0f, 1.0f);
+			float score_playerX = 60.0f;
+			float score_player2X = windowWidth - 100.0f; 
+			renderText(score_player, score_playerX, windowHeight - 50.0f, 1.0f);
+			renderText(score_player2, score_player2X, windowHeight - 50.0f, 1.0f);
 
-        // Loading shader program
-        glUseProgram(shaderProgram);
+			// Target score
+			const char* winningScore = "Target Score: 6";
+			float winningScoreX = (windowWidth - strlen(winningScore) * 20) / 2;
+			renderText(winningScore, winningScoreX, windowHeight - 100.0f, 1.0f);
 
-        // Draw player
-        int player_y_dirLocation = glGetUniformLocation(shaderProgram, "player_y_dir");
-        glUniform1f(player_y_dirLocation, y_dir);
-        glBindVertexArray(VAO);
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+			// Loading shader program
+			glUseProgram(shaderProgram);
 
-        // Update ball uniform position
-        int ballPosLocation = glGetUniformLocation(shaderProgram, "ballPos");
-        glUniform2f(ballPosLocation, ballPOSx, ballPOSy);
+			// Draw player
+			int player_y_dirLocation = glGetUniformLocation(shaderProgram, "player_y_dir");
+			glUniform1f(player_y_dirLocation, y_dir);
+			glBindVertexArray(VAO);
+			glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
-        // Draw circle
-        glBindVertexArray(circleVAO);
-        glDrawArrays(GL_TRIANGLE_FAN, 0, numSegments);
+			// Update ball uniform position
+			int ballPosLocation = glGetUniformLocation(shaderProgram, "ballPos");
+			glUniform2f(ballPosLocation, ballPOSx, ballPOSy);
 
-        glfwSwapBuffers(window);
+			// Draw circle
+			glBindVertexArray(circleVAO);
+			glDrawArrays(GL_TRIANGLE_FAN, 0, numSegments);
 
-        // Check for collisions with the player's paddle
-        if (ballPOSx < -0.93f && ballPOSx > -0.95f && ballPOSy < (y_dir + 0.1f) && ballPOSy > (y_dir - 0.1f))
-        {
-            xSpeed = -xSpeed;
-        }
+			updateBallPosition(&ballPOSx, &ballPOSy, &xSpeed, &ySpeed, radius, y_dir);
+            handleBallWallCollision(&ballPOSx, &ballPOSy, &xSpeed, &ySpeed, &player1_score, &player2_score, radius);
+		}
 
-        // Update ball pos
-        ballPOSx += xSpeed;
-        ballPOSy += ySpeed;
-
-        // Making sure ball stays within the game
-        if (ballPOSx > (1.0f - radius) || ballPOSx < -(1.0f - radius)) {
-            if (ballPOSx > (1.0f - radius)) {
-                player1_score++;
-            }
-            else if (ballPOSx < -(1.0f - radius)) {
-                player2_score++;
-            }
-
-        ballPOSx = 0.0f;
-        ballPOSy = 0.0f;
-
-        float angle;
-        float randomDirection = (float)rand() / RAND_MAX;
-        if (randomDirection < 0.25f) {
-            angle = randomDirection * (M_PI / 3) + (M_PI / 6);
-        } else if (randomDirection < 0.5f) {
-            angle = randomDirection * (M_PI / 3) + (2 * M_PI / 3);
-        } else if (randomDirection < 0.75f) {
-            angle = randomDirection * (M_PI / 3) + (6 * M_PI / 6);
-        } else {
-            angle = randomDirection * (M_PI / 3) + (8.5 * M_PI / 6);
-        }
-        xSpeed = SPEED * cos(angle);
-        ySpeed = SPEED * sin(angle);
-    }
-        if (ballPOSy > (1.0f - radius)) {
-            ballPOSy = 1.0f - radius;
-            ySpeed = -ySpeed;
-        }
-        else if (ballPOSy < -(1.0f - radius)) {
-            ballPOSy = -(1.0f - radius);
-            ySpeed = -ySpeed;
-        }
-
-        glfwPollEvents();
-
-    }
+		glfwSwapBuffers(window);
+		glfwPollEvents();
+	}
 
     // Cleaning up the game
     glDeleteBuffers(1, &VBO);
@@ -381,6 +350,12 @@ int main()
     glDeleteBuffers(1, &circleVBO);
     glDeleteProgram(shaderProgram);
     glDeleteProgram(textShaderProgram);
+    glDeleteTextures(1, &textTexture);
+    glDeleteVertexArrays(1, &textVAO);
+    glDeleteBuffers(1, &textVBO);
+
+    FT_Done_Face(face);
+    FT_Done_FreeType(ft);
 
     glfwDestroyWindow(window);
     glfwTerminate();
@@ -395,6 +370,73 @@ void readKeyboard(GLFWwindow *window, float *y_direction)
     }
     if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS && *y_direction > -0.9f) {
         *y_direction -= SPEED;
+    }
+}
+
+void handleGameOver(int player1_score, int player2_score, bool* gameOver) {
+    static int winningPlayer = 0;
+    if (!*gameOver && (player1_score >= 6 || player2_score >=6)) {
+        *gameOver = true;
+        winningPlayer = (player1_score >= 6) ? 1 : 2;
+    }
+
+    if (*gameOver) {
+        displayGameOverMessage(winningPlayer);
+    }
+}
+
+void displayGameOverMessage(int winningPlayer) {
+    char gameOverText[20];
+    snprintf(gameOverText, sizeof(gameOverText), "Player %d wins!", winningPlayer);
+    float gameOverTextX = (windowWidth - strlen(gameOverText) * 20) / 2;
+    float gameOverTextY = windowHeight / 2;
+    renderText(gameOverText, gameOverTextX, gameOverTextY, 1.5f);
+}
+
+void updateBallPosition(float *ballPOSx, float *ballPOSy, float *xSpeed, float *ySpeed, float radius, float y_dir) {
+    if (*ballPOSx < -0.93f && *ballPOSx > -0.95f && *ballPOSy < (y_dir + 0.1f) && *ballPOSy > (y_dir - 0.1f)) {
+        *xSpeed = -*xSpeed;
+    }
+
+    // Update ball position
+    *ballPOSx += *xSpeed;
+    *ballPOSy += *ySpeed;
+
+    // Creating boundary for the ball
+    if (*ballPOSy > (1.0f - radius)) {
+        *ballPOSy = 1.0f - radius;
+        *ySpeed = -*ySpeed;
+    }
+    else if (*ballPOSy < -(1.0f - radius)) {
+        *ballPOSy = -(1.0f - radius);
+        *ySpeed = -*ySpeed;
+    }
+}
+
+void handleBallWallCollision(float *ballPOSx, float *ballPOSy, float *xSpeed, float *ySpeed, int *player1_score, int *player2_score, float radius) {
+    if (*ballPOSx > (1.0f - radius) || *ballPOSx < -(1.0f - radius)) {
+        if (*ballPOSx > (1.0f - radius)) {
+            (*player1_score)++;
+        } else if (*ballPOSx < -(1.0f - radius)) {
+            (*player2_score)++;
+        }
+
+        *ballPOSx = 0.0f;
+        *ballPOSy = 0.0f;
+
+        float angle;
+        float randomDirection = (float)rand() / RAND_MAX;
+        if (randomDirection < 0.25f) {
+            angle = randomDirection * (M_PI * 7 / 18) + (M_PI * 11 / 18);
+        } else if (randomDirection < 0.5f) {
+            angle = randomDirection * (M_PI * 7 / 18) + (M_PI * 3 / 2);
+        } else if (randomDirection < 0.75f) {
+            angle = randomDirection * (M_PI * 7 / 18) + (M_PI * 29 / 18);
+        } else {
+            angle = randomDirection * (M_PI * 7 / 18) + (M_PI * 35 / 18);
+        }
+        *xSpeed = SPEED * cos(angle);
+        *ySpeed = SPEED * sin(angle);
     }
 }
 
