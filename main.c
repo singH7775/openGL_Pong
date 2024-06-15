@@ -11,7 +11,7 @@
 #include FT_FREETYPE_H
 
 #define M_PI 3.14159265358979323846
-#define SPEED 0.0002
+#define SPEED 0.0001
 
 float windowWidth = 1400, windowHeight = 800;
 float y_dir = 0.0f;
@@ -26,7 +26,8 @@ void handleGameOver(int player1_score, int player2_score, bool* gameOver);
 void displayGameOverMessage(int winningPlayer);
 void handlePlayAgainButton(GLFWwindow* window, int* player1_score, int* player2_score, bool* gameOver, float* ballPOSx, float* ballPOSy);
 void updateBallPosition(float *ballPOSx, float *ballPOSy, float *xSpeed, float *ySpeed, float radius, float y_dir);
-void handleBallWallCollision(float *ballPOSx, float *ballPOSy, float *xSpeed, float *ySpeed, int *player1_score, int *player2_score, float radius);
+void updateNPCPaddlePosition(float* npcPaddlePosY, float ballPosY, float ballSpeed, float npcPaddleHeight);
+void handleBallWallCollision(float *ballPOSx, float *ballPOSy, float *xSpeed, float *ySpeed, int *player1_score, int *player2_score, float radius, float npcPaddlePosY, float npcPaddleWidth, float npcPaddleHeight);
 void renderText(const char *text, float x, float y, float scale);
 void framebuffer_resize_callback(GLFWwindow* window, int fbW, int fbH);
 
@@ -65,12 +66,15 @@ int main()
         "layout (location = 0) in vec3 aPos;\n"
         "uniform float player_y_dir;\n"
         "uniform vec2 ballPos;\n"
+        "uniform float npcPaddlePos;\n"
         "void main() {\n"
         "   if (aPos.x < -0.8) {\n"
         "       gl_Position = vec4(aPos.x, aPos.y + player_y_dir, aPos.z, 1.0f);\n"
+        "   } else if (aPos.x > 0.8) {\n"
+        "       gl_Position = vec4(aPos.x, aPos.y + npcPaddlePos, aPos.z, 1.0f);\n"
         "   } else {\n"
         "       gl_Position = vec4(aPos.x + ballPos.x, aPos.y + ballPos.y, aPos.z, 1.0f);\n"
-        "   }\n"
+        "   }\n"        
         "}\0";
 
     const char* fragmentShaderSrc = 
@@ -149,8 +153,35 @@ int main()
     glBindVertexArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
+    // Creating NPC paddle
+    float npcPaddleWidth = 0.02f;
+    float npcPaddleHeight = 0.2f;
+    float npcPaddlePosX = 0.95f - npcPaddleWidth;
+    float npcPaddlePosY = 0.0f;
+
+    float npcPaddleVertices[] = {
+    npcPaddlePosX, npcPaddlePosY - npcPaddleHeight / 2, 0.0f,
+    npcPaddlePosX, npcPaddlePosY + npcPaddleHeight / 2, 0.0f,
+    npcPaddlePosX + npcPaddleWidth, npcPaddlePosY - npcPaddleHeight / 2, 0.0f,
+    npcPaddlePosX + npcPaddleWidth, npcPaddlePosY + npcPaddleHeight / 2, 0.0f
+    };
+
+    unsigned int npcPaddleVAO, npcPaddleVBO;
+    glGenVertexArrays(1, &npcPaddleVAO);
+    glGenBuffers(1, &npcPaddleVBO);
+
+    glBindVertexArray(npcPaddleVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, npcPaddleVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(npcPaddleVertices), npcPaddleVertices, GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
+    glBindVertexArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0); 
+
     // Creating game ball
-    const int numSegments = 300;
+    const int numSegments = 500;
     float circleVertices[numSegments * 3];
     float radius = 0.03f;
     float ballPOSx = 0;
@@ -329,16 +360,25 @@ int main()
 			glBindVertexArray(VAO);
 			glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
+            // Update NPC paddle position
+            updateNPCPaddlePosition(&npcPaddlePosY, ballPOSy, SPEED, npcPaddleHeight);
+
+            // Draw NPC paddle
+            int npcPaddlePosLocation = glGetUniformLocation(shaderProgram, "npcPaddlePos");
+            glUniform1f(npcPaddlePosLocation, npcPaddlePosY);
+            glBindVertexArray(npcPaddleVAO);
+            glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
 			// Update ball uniform position
 			int ballPosLocation = glGetUniformLocation(shaderProgram, "ballPos");
 			glUniform2f(ballPosLocation, ballPOSx, ballPOSy);
 
-			// Draw circle
+			// Draw ball
 			glBindVertexArray(circleVAO);
 			glDrawArrays(GL_TRIANGLE_FAN, 0, numSegments);
 
 			updateBallPosition(&ballPOSx, &ballPOSy, &xSpeed, &ySpeed, radius, y_dir);
-            handleBallWallCollision(&ballPOSx, &ballPOSy, &xSpeed, &ySpeed, &player1_score, &player2_score, radius);
+            handleBallWallCollision(&ballPOSx, &ballPOSy, &xSpeed, &ySpeed, &player1_score, &player2_score, radius, npcPaddlePosY, npcPaddleWidth, npcPaddleHeight);
 		} else {
             if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
                 handlePlayAgainButton(window, &player1_score, &player2_score, &gameOver, &ballPOSx, &ballPOSy);
@@ -352,6 +392,8 @@ int main()
     // Cleaning up the game
     glDeleteBuffers(1, &VBO);
     glDeleteVertexArrays(1, &VAO);
+    glDeleteBuffers(1, &npcPaddleVBO);
+    glDeleteVertexArrays(1, &npcPaddleVAO);
     glDeleteVertexArrays(1, &circleVAO);
     glDeleteBuffers(1, &circleVBO);
     glDeleteProgram(shaderProgram);
@@ -453,7 +495,30 @@ void updateBallPosition(float *ballPOSx, float *ballPOSy, float *xSpeed, float *
     }
 }
 
-void handleBallWallCollision(float *ballPOSx, float *ballPOSy, float *xSpeed, float *ySpeed, int *player1_score, int *player2_score, float radius) {
+void updateNPCPaddlePosition(float* npcPaddlePosY, float ballPosY, float ballSpeed, float npcPaddleHeight) {
+    float paddleCenter = *npcPaddlePosY;
+    float ballCenter = ballPosY;
+
+    if (ballCenter > paddleCenter) {
+        *npcPaddlePosY += ballSpeed;
+    } else if (ballCenter < paddleCenter) {
+        *npcPaddlePosY -= ballSpeed;
+    }
+
+    // Limit the NPC paddle position within the window bounds
+    if (*npcPaddlePosY > 1.0f - npcPaddleHeight / 2) {
+        *npcPaddlePosY = 1.0f - npcPaddleHeight / 2;
+    } else if (*npcPaddlePosY < -1.0f + npcPaddleHeight / 2) {
+        *npcPaddlePosY = -1.0f + npcPaddleHeight / 2;
+    }
+}
+
+void handleBallWallCollision(float *ballPOSx, float *ballPOSy, float *xSpeed, float *ySpeed, int *player1_score, int *player2_score, float radius, float npcPaddlePosY, float npcPaddleWidth, float npcPaddleHeight) {
+    if (*ballPOSx > (0.95f - npcPaddleWidth - radius) && *ballPOSx < (0.95f - radius) &&
+        *ballPOSy > (npcPaddlePosY - npcPaddleHeight / 2) && *ballPOSy < (npcPaddlePosY + npcPaddleHeight / 2)) {
+        *xSpeed = -*xSpeed;
+    }
+
     if (*ballPOSx > (1.0f - radius) || *ballPOSx < -(1.0f - radius)) {
         if (*ballPOSx > (1.0f - radius)) {
             (*player1_score)++;
