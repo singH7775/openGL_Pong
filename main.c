@@ -1,8 +1,6 @@
 #include <stdio.h>
 #include <math.h>
 #include <time.h>
-#include <stdio.h>
-#include <string.h>
 #include <stdbool.h>
 
 #include <glad/glad.h>
@@ -12,6 +10,7 @@
 
 #define M_PI 3.14159265358979323846
 #define SPEED 0.0001
+#define NPC_PADDLE_SPEED 0.03f
 
 float windowWidth = 1400, windowHeight = 800;
 float y_dir = 0.0f;
@@ -26,7 +25,7 @@ void handleGameOver(int player1_score, int player2_score, bool* gameOver);
 void displayGameOverMessage(int winningPlayer);
 void handlePlayAgainButton(GLFWwindow* window, int* player1_score, int* player2_score, bool* gameOver, float* ballPOSx, float* ballPOSy);
 void updateBallPosition(float *ballPOSx, float *ballPOSy, float *xSpeed, float *ySpeed, float radius, float y_dir);
-void updateNPCPaddlePosition(float* npcPaddlePosY, float ballPosY, float ballSpeed, float npcPaddleHeight);
+void updateNPCPaddlePosition(float* npcPaddlePosY, float ballPosY, float npcPaddleHeight);
 void handleBallWallCollision(float *ballPOSx, float *ballPOSy, float *xSpeed, float *ySpeed, int *player1_score, int *player2_score, float radius, float npcPaddlePosY, float npcPaddleWidth, float npcPaddleHeight);
 void renderText(const char *text, float x, float y, float scale);
 void framebuffer_resize_callback(GLFWwindow* window, int fbW, int fbH);
@@ -361,7 +360,7 @@ int main()
 			glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
             // Update NPC paddle position
-            updateNPCPaddlePosition(&npcPaddlePosY, ballPOSy, SPEED, npcPaddleHeight);
+            updateNPCPaddlePosition(&npcPaddlePosY, ballPOSy, npcPaddleHeight);
 
             // Draw NPC paddle
             int npcPaddlePosLocation = glGetUniformLocation(shaderProgram, "npcPaddlePos");
@@ -414,10 +413,10 @@ int main()
 void readKeyboard(GLFWwindow *window, float *y_direction)
 {
     if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS && *y_direction < 0.9f) {
-        *y_direction += SPEED;
+        *y_direction += 0.0002;
     }
     if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS && *y_direction > -0.9f) {
-        *y_direction -= SPEED;
+        *y_direction -= 0.0002;
     }
 }
 
@@ -477,7 +476,7 @@ void handlePlayAgainButton(GLFWwindow* window, int* player1_score, int* player2_
 
 void updateBallPosition(float *ballPOSx, float *ballPOSy, float *xSpeed, float *ySpeed, float radius, float y_dir) {
     if (*ballPOSx < -0.93f && *ballPOSx > -0.95f && *ballPOSy < (y_dir + 0.1f) && *ballPOSy > (y_dir - 0.1f)) {
-        *xSpeed = -*xSpeed;
+        *xSpeed = -*xSpeed * 1.2f;
     }
 
     // Update ball position
@@ -495,15 +494,14 @@ void updateBallPosition(float *ballPOSx, float *ballPOSy, float *xSpeed, float *
     }
 }
 
-void updateNPCPaddlePosition(float* npcPaddlePosY, float ballPosY, float ballSpeed, float npcPaddleHeight) {
+void updateNPCPaddlePosition(float* npcPaddlePosY, float ballPosY, float npcPaddleHeight) {
     float paddleCenter = *npcPaddlePosY;
     float ballCenter = ballPosY;
 
-    if (ballCenter > paddleCenter) {
-        *npcPaddlePosY += ballSpeed;
-    } else if (ballCenter < paddleCenter) {
-        *npcPaddlePosY -= ballSpeed;
-    }
+    float distance = ballCenter - paddleCenter;
+    float speed = distance * 0.0005f; // Adjust the multiplier to control the paddle speed
+
+    *npcPaddlePosY += speed;
 
     // Limit the NPC paddle position within the window bounds
     if (*npcPaddlePosY > 1.0f - npcPaddleHeight / 2) {
@@ -516,7 +514,7 @@ void updateNPCPaddlePosition(float* npcPaddlePosY, float ballPosY, float ballSpe
 void handleBallWallCollision(float *ballPOSx, float *ballPOSy, float *xSpeed, float *ySpeed, int *player1_score, int *player2_score, float radius, float npcPaddlePosY, float npcPaddleWidth, float npcPaddleHeight) {
     if (*ballPOSx > (0.95f - npcPaddleWidth - radius) && *ballPOSx < (0.95f - radius) &&
         *ballPOSy > (npcPaddlePosY - npcPaddleHeight / 2) && *ballPOSy < (npcPaddlePosY + npcPaddleHeight / 2)) {
-        *xSpeed = -*xSpeed;
+        *xSpeed = -*xSpeed * 1.2f;
     }
 
     if (*ballPOSx > (1.0f - radius) || *ballPOSx < -(1.0f - radius)) {
@@ -530,14 +528,15 @@ void handleBallWallCollision(float *ballPOSx, float *ballPOSy, float *xSpeed, fl
         *ballPOSy = 0.0f;
 
         // Shoot the ball at angle that is not between 80/100 or 260/280
+        float initialSpeed = SPEED;
         float angle;
         do {
             angle = ((float)rand() / RAND_MAX) * 2 * M_PI;
         } while ((angle >= (80.0f * M_PI / 180.0f) && angle <= (100.0f * M_PI / 180.0f)) ||
                 (angle >= (260.0f * M_PI / 180.0f) && angle <= (280.0f * M_PI / 180.0f)));
         
-        *xSpeed = SPEED * cos(angle);
-        *ySpeed = SPEED * sin(angle);
+        *xSpeed = initialSpeed * cos(angle);
+        *ySpeed = initialSpeed * sin(angle);
     }
 }
 
