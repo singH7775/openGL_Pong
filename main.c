@@ -24,6 +24,7 @@ GLuint textVAO, textVBO;
 void readKeyboard(GLFWwindow *window, float *y_direction);
 void handleGameOver(int player1_score, int player2_score, bool* gameOver);
 void displayGameOverMessage(int winningPlayer);
+void handlePlayAgainButton(GLFWwindow* window, int* player1_score, int* player2_score, bool* gameOver, float* ballPOSx, float* ballPOSy);
 void updateBallPosition(float *ballPOSx, float *ballPOSy, float *xSpeed, float *ySpeed, float radius, float y_dir);
 void handleBallWallCollision(float *ballPOSx, float *ballPOSy, float *xSpeed, float *ySpeed, int *player1_score, int *player2_score, float radius);
 void renderText(const char *text, float x, float y, float scale);
@@ -160,17 +161,18 @@ int main()
     // To create random direction for ball in start
     srand(time(NULL));
     float angle;
+    do {
+        angle = ((float)rand() / RAND_MAX) * 2 * M_PI;
+    } while ((angle >= (80.0f * M_PI / 180.0f) && angle <= (100.0f * M_PI / 180.0f)) ||
+            (angle >= (260.0f * M_PI / 180.0f) && angle <= (280.0f * M_PI / 180.0f)));
+
     float randomDirection = (float)rand() / RAND_MAX;
     if (randomDirection < 0.5f) {
-    // Allow the ball to shoot at angles between 110 and 250 degrees (left)
-    angle = ((float)rand() / RAND_MAX) * (M_PI * 7 / 9) + (M_PI * 11 / 18);
-    xSpeed = -SPEED * cos(angle);
-    ySpeed = -SPEED * sin(angle);
+        xSpeed = -SPEED * cos(angle);
+        ySpeed = -SPEED * sin(angle);
     } else {
-    // Allow the ball to shoot at angles between 290 and 70 degrees (right)
-    angle = ((float)rand() / RAND_MAX) * (M_PI * 7 / 9) + (M_PI * 29 / 18);
-    xSpeed = SPEED * cos(angle);
-    ySpeed = SPEED * sin(angle);
+        xSpeed = SPEED * cos(angle);
+        ySpeed = SPEED * sin(angle);
     }
 
     // Vertices for the ball
@@ -337,7 +339,11 @@ int main()
 
 			updateBallPosition(&ballPOSx, &ballPOSy, &xSpeed, &ySpeed, radius, y_dir);
             handleBallWallCollision(&ballPOSx, &ballPOSy, &xSpeed, &ySpeed, &player1_score, &player2_score, radius);
-		}
+		} else {
+            if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+                handlePlayAgainButton(window, &player1_score, &player2_score, &gameOver, &ballPOSx, &ballPOSy);
+            }
+        }
 
 		glfwSwapBuffers(window);
 		glfwPollEvents();
@@ -391,6 +397,40 @@ void displayGameOverMessage(int winningPlayer) {
     float gameOverTextX = (windowWidth - strlen(gameOverText) * 20) / 2;
     float gameOverTextY = windowHeight / 2;
     renderText(gameOverText, gameOverTextX, gameOverTextY, 1.5f);
+
+    // Displaying play again button
+    const char* playAgainText = "Play Again";
+    float playAgainTextWidth = strlen(playAgainText) * 20;
+    float playAgainTextX = (windowWidth - playAgainTextWidth) / 2;
+    float playAgainTextY = gameOverTextY - 50.0f;
+    renderText(playAgainText, playAgainTextX, playAgainTextY, 1.0f);
+}
+
+void handlePlayAgainButton(GLFWwindow* window, int* player1_score, int* player2_score, bool* gameOver, float* ballPOSx, float* ballPOSy) {
+    double mouseX, mouseY;
+    glfwGetCursorPos(window, &mouseX, &mouseY);
+
+    // Convert mouse coordinates to OpenGL coordinates
+    float openglX = (float)mouseX;
+    float openglY = windowHeight - (float)mouseY;
+
+    // Check if the mouse click is within the button area
+    const char* playAgainText = "Play Again";
+    float playAgainTextWidth = strlen(playAgainText) * 20;
+    float playAgainTextX = (windowWidth - playAgainTextWidth) / 2;
+    float playAgainTextY = windowHeight / 2 - 50.0f;
+    float buttonWidth = playAgainTextWidth;
+    float buttonHeight = 40.0f;
+
+    if (openglX >= playAgainTextX && openglX <= playAgainTextX + buttonWidth &&
+        openglY >= playAgainTextY && openglY <= playAgainTextY + buttonHeight) {
+        // Reset game state
+        *player1_score = 0;
+        *player2_score = 0;
+        *gameOver = false;
+        *ballPOSx = 0.0f;
+        *ballPOSy = 0.0f;
+    }
 }
 
 void updateBallPosition(float *ballPOSx, float *ballPOSy, float *xSpeed, float *ySpeed, float radius, float y_dir) {
@@ -424,17 +464,13 @@ void handleBallWallCollision(float *ballPOSx, float *ballPOSy, float *xSpeed, fl
         *ballPOSx = 0.0f;
         *ballPOSy = 0.0f;
 
+        // Shoot the ball at angle that is not between 80/100 or 260/280
         float angle;
-        float randomDirection = (float)rand() / RAND_MAX;
-        if (randomDirection < 0.25f) {
-            angle = randomDirection * (M_PI * 7 / 18) + (M_PI * 11 / 18);
-        } else if (randomDirection < 0.5f) {
-            angle = randomDirection * (M_PI * 7 / 18) + (M_PI * 3 / 2);
-        } else if (randomDirection < 0.75f) {
-            angle = randomDirection * (M_PI * 7 / 18) + (M_PI * 29 / 18);
-        } else {
-            angle = randomDirection * (M_PI * 7 / 18) + (M_PI * 35 / 18);
-        }
+        do {
+            angle = ((float)rand() / RAND_MAX) * 2 * M_PI;
+        } while ((angle >= (80.0f * M_PI / 180.0f) && angle <= (100.0f * M_PI / 180.0f)) ||
+                (angle >= (260.0f * M_PI / 180.0f) && angle <= (280.0f * M_PI / 180.0f)));
+        
         *xSpeed = SPEED * cos(angle);
         *ySpeed = SPEED * sin(angle);
     }
