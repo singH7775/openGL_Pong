@@ -11,10 +11,10 @@ GLuint textVAO, textVBO;
 void readKeyboard(GLFWwindow *window, float *y_direction)
 {
     if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS && *y_direction < 0.9f) {
-        *y_direction += 0.0002;
+        *y_direction += PLAYER_PADDLE_SPEED;
     }
     if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS && *y_direction > -0.9f) {
-        *y_direction -= 0.0002;
+        *y_direction -= PLAYER_PADDLE_SPEED;
     }
 }
 
@@ -103,7 +103,7 @@ void updateNPCPaddlePosition(float* npcPaddlePosY, float ballPosY, float npcPadd
     float ballCenter = ballPosY;
 
     float distance = ballCenter - paddleCenter;
-    float speed = distance * 0.0010f; // Adjust the multiplier to control the paddle speed
+    float speed = distance * NPC_PADDLE_SPEED; // Adjust the multiplier to control the paddle speed
 
     *npcPaddlePosY += speed;
 
@@ -159,10 +159,8 @@ void renderText(const char *text, float x, float y, float scale) {
     };
     glUniformMatrix4fv(glGetUniformLocation(textShaderProgram, "projection"), 1, GL_FALSE, projection);
 
-    // Bind the VAO for rendering the text quads
     glBindVertexArray(textVAO);
 
-    // Iterate over each character in the text string
     for (const char *p = text; *p; p++) {
         // Load the glyph for the character
         if (FT_Load_Char(face, *p, FT_LOAD_RENDER))
@@ -197,7 +195,6 @@ void renderText(const char *text, float x, float y, float scale) {
         x += (face->glyph->advance.x >> 6) * scale;
     }
 
-    // Unbind the VAO and shader program
     glBindVertexArray(0);
     glUseProgram(0);
 }

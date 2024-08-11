@@ -12,8 +12,9 @@
 #include <stdbool.h>
 
 #define M_PI 3.14159265358979323846
-#define SPEED 0.0001
-#define NPC_PADDLE_SPEED 0.03f
+#define SPEED 0.0035
+#define NPC_PADDLE_SPEED 0.05f
+#define PLAYER_PADDLE_SPEED 0.01
 
 extern float windowWidth; 
 extern float windowHeight;

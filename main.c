@@ -29,7 +29,7 @@ int main()
         return -1;
     }
 
-    // Shaders code
+    // Shaders
     const char* vertexShaderSrc = 
         "#version 330 core\n"
         "layout (location = 0) in vec3 aPos;\n"
@@ -150,9 +150,8 @@ int main()
     glBindBuffer(GL_ARRAY_BUFFER, 0); 
 
     // Creating game ball
-    const int numSegments = 500;
-    float circleVertices[numSegments * 3];
-    float radius = 0.03f;
+    const int numSegments = 200;
+    float radius = 0.025f;
     float ballPOSx = 0;
     float ballPOSy = 0;
     float xSpeed = 0;
@@ -175,13 +174,23 @@ int main()
         ySpeed = SPEED * sin(angle);
     }
 
+    // Get the current viewport size, keep ball circular
+    GLint viewport[4];
+    glGetIntegerv(GL_VIEWPORT, viewport);
+    float aspectRatio = (float)viewport[2] / (float)viewport[3];
+
     // Vertices for the ball
-    for (int i = 0; i < numSegments; i++) {
-        float angle = i * (2.0f * M_PI / numSegments);
-        circleVertices[i * 3] = radius * cos(angle);
-        circleVertices[i * 3 + 1] = radius * sin(angle);
-        circleVertices[i * 3 + 2] = 0.0f;
-    }
+    float circleVertices[(numSegments + 2) * 3];
+    circleVertices[0] = ballPOSx;
+    circleVertices[1] = ballPOSy;
+    circleVertices[2] = 0.0f;
+
+    for (int i = 0; i <= numSegments; i++) {
+    float theta = i * 2.0f * M_PI / numSegments;
+    circleVertices[(i + 1) * 3] = ballPOSx + (radius * cosf(theta) / aspectRatio);
+    circleVertices[(i + 1) * 3 + 1] = ballPOSy + radius * sinf(theta);
+    circleVertices[(i + 1) * 3 + 2] = 0.0f;
+}  
 
     // VA and BO for ball
     unsigned int circleVAO, circleVBO;
@@ -204,9 +213,9 @@ int main()
         return -1;
     }
 
-    if(FT_New_Face(ft, "C:/myFonts/ariali.ttf", 0, &face))
+    if(FT_New_Face(ft, "/home/har/myFonts/ariali.ttf", 0, &face))
     {
-        fprintf(stderr, "Failed to load font\n");
+        fprintf(stderr, "Failed to load font!\n");
         return -1;
     }
 
@@ -345,7 +354,7 @@ int main()
 
 			// Draw ball
 			glBindVertexArray(circleVAO);
-			glDrawArrays(GL_TRIANGLE_FAN, 0, numSegments);
+			glDrawArrays(GL_TRIANGLE_FAN, 0, numSegments + 2);
 
 			updateBallPosition(&ballPOSx, &ballPOSy, &xSpeed, &ySpeed, radius, y_dir);
             handleBallWallCollision(&ballPOSx, &ballPOSy, &xSpeed, &ySpeed, &player1_score, &player2_score, radius, npcPaddlePosY, npcPaddleWidth, npcPaddleHeight);
